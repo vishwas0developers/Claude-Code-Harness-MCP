@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { PLATFORMS, SUPPORTED_AGENTS, AgentId, installHarness, describeAgent, getSkillDrift } from "../install";
+import { PLATFORMS, SUPPORTED_AGENTS, AgentId, installHarness, describeAgent, getSkillDrift, isAgentConfigured } from "../install";
 import { ensureConfig, getConfigPath } from "../src/config";
 
 const pkg = require("../../package.json");
@@ -35,11 +35,17 @@ program
 
 program
   .command("doctor")
-  .description("Report (and repair) drift: missing/stale skill files or MCP entries against the currently installed version. Runs with no arguments — `--check-only` below is optional.")
+  .description("Report (and repair) drift for agents already configured in this project — missing/stale skill files, MCP entries, or a stale version — against the currently installed version. Never touches agents this project hasn't set up. Runs with no arguments — `--check-only` below is optional.")
   .option("--check-only", "Report drift without repairing anything (optional)")
   .action((opts) => {
+    const configuredAgents = (SUPPORTED_AGENTS as AgentId[]).filter((agentId) => isAgentConfigured(agentId, process.cwd()));
+    if (configuredAgents.length === 0) {
+      console.log("No agents are configured in this project yet. Run `setup <agent>` first.");
+      return;
+    }
+
     let staleCount = 0;
-    for (const agentId of SUPPORTED_AGENTS as AgentId[]) {
+    for (const agentId of configuredAgents) {
       const drift = getSkillDrift(agentId, process.cwd());
       if (drift.isStale) {
         staleCount++;
@@ -50,7 +56,7 @@ program
       }
     }
     if (staleCount === 0) {
-      console.log("✓ All configured agents are up to date.");
+      console.log(`✓ All configured agents are up to date (${configuredAgents.join(", ")}).`);
     } else if (opts.checkOnly) {
       console.log(`\n${staleCount} agent(s) have drift. Run without --check-only to repair.`);
     } else {

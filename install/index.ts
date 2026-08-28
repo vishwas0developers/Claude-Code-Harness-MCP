@@ -131,6 +131,29 @@ function writeCodexMcpConfig(configPath: string): void {
   console.log(`✓ Configured MCP server: ${configPath}`);
 }
 
+// Used by `doctor` to skip agents that were never set up in this project — without
+// this, doctor would try to configure every one of the ~19 supported agents on every
+// run, regardless of whether the project actually uses them. Deliberately checks ONLY
+// the MCP config entry, never the skills directory: several agents (vscode, cursor,
+// amp) share the generic ".agents/skills/" fallback with antigravity when they have no
+// verified dedicated skills path, so a skill folder found there doesn't tell you which
+// agent actually created it. Each agent's MCP config path is always agent-specific
+// (even the "best-effort" `.{slug}/mcp.json` ones), so it's the only unambiguous signal.
+export function isAgentConfigured(agentId: AgentId, targetDir: string = process.cwd()): boolean {
+  const mcpConfigPath = resolveMcpConfigPath(agentId, targetDir);
+  if (!fs.existsSync(mcpConfigPath)) return false;
+
+  if (agentId === "codex") {
+    return fs.readFileSync(mcpConfigPath, "utf-8").includes(`[mcp_servers.${MCP_SERVER_NAME}]`);
+  }
+  try {
+    const config = JSON.parse(fs.readFileSync(mcpConfigPath, "utf-8"));
+    return Boolean(config?.mcpServers?.[MCP_SERVER_NAME]);
+  } catch {
+    return false;
+  }
+}
+
 // A single skill, deployed under the exact same name/slash-command on every agent —
 // see README.md "The claude-code-harness-mcp Skill". ponytail: one shared skill file instead
 // of workspace-sync's six, because this harness only has one workflow to teach.
