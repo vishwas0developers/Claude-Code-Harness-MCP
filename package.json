@@ -1,6 +1,6 @@
 {
   "name": "claude-code-harness-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "MCP server that routes functionality/backend/logic tasks from any AI coding agent to a local Claude Code session, while the host agent keeps doing design/UI work itself.",
   "main": "dist/src/server.js",
   "bin": {
