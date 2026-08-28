@@ -12,6 +12,8 @@ Claude Code Harness MCP fixes that. It runs as a local MCP server that exposes C
 
 If you find this project useful, consider giving it a ⭐ on GitHub!
 
+📖 **Looking for a specific command?** See the [Full Command Reference](docs/COMMANDS.md) for every terminal command and every `/Claude-Code-Harness-MCP` skill invocation in one place.
+
 ---
 
 ## 📋 Requirements

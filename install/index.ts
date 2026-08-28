@@ -213,6 +213,15 @@ export function installHarness(agentId: AgentId, targetDir: string = process.cwd
   }
 
   const skillsDir = resolveSkillsDir(agentId, targetDir);
+
+  // Renamed from "Claude-Harness-MCP" — remove the old directory so agents don't
+  // show both as separate skill/slash-command entries side by side.
+  const staleDir = path.join(skillsDir, "Claude-Harness-MCP");
+  if (fs.existsSync(staleDir)) {
+    fs.rmSync(staleDir, { recursive: true, force: true });
+    console.log(`✓ Removed stale skill: ${staleDir}`);
+  }
+
   const skillDir = path.join(skillsDir, SKILL_NAME);
   if (!fs.existsSync(skillDir)) fs.mkdirSync(skillDir, { recursive: true });
   fs.writeFileSync(path.join(skillDir, "SKILL.md"), SKILL_CONTENT.trim() + "\n", "utf-8");
@@ -243,6 +252,9 @@ export function getSkillDrift(agentId: AgentId, targetDir: string): SkillDrift {
   const skillFile = path.join(skillsDir, SKILL_NAME, "SKILL.md");
   const versionStamp = path.join(skillsDir, ".claude-harness-mcp-version");
 
+  if (fs.existsSync(path.join(skillsDir, "Claude-Harness-MCP"))) {
+    return { agentId, isStale: true, reason: "stale pre-rename skill (Claude-Harness-MCP) still present" };
+  }
   if (!fs.existsSync(skillFile)) {
     return { agentId, isStale: true, reason: "skill not installed" };
   }
