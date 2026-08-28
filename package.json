@@ -10,7 +10,8 @@
     "dist/cli",
     "dist/install",
     "dist/src",
-    "!dist/src/test"
+    "!dist/src/test",
+    "scripts/postinstall.js"
   ],
   "type": "commonjs",
   "license": "MIT",
@@ -33,6 +34,7 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
+    "postinstall": "node scripts/postinstall.js",
     "pretest": "npm run build",
     "test": "node --test dist/src/test/*.test.js",
     "prepublishOnly": "npm run build"

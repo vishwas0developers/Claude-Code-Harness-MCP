@@ -26,6 +26,8 @@ Before installing Claude Code Harness MCP, ensure your environment meets the fol
 
 > [!NOTE]
 > Claude Code Harness MCP shells out to your local Claude Code CLI session — it reuses your existing Pro/Max subscription login, it does **not** use a raw Anthropic API key. Run `claude /login` once before `setup` if you haven't already authenticated Claude Code on this machine.
+>
+> **Global install auto-installs the CLI too.** `npm install -g claude-code-harness-mcp` checks for `claude` on your PATH and, if it's missing, runs `npm install -g @anthropic-ai/claude-code` for you automatically. You still need to run `claude /login` yourself afterward — auto-install only gets the binary in place, it can't drive the browser-based OAuth flow. `npx claude-code-harness-mcp ...` (no global install) skips this — install the CLI yourself first if you're using the `npx` form.
 
 ---
 
