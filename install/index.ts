@@ -4,6 +4,18 @@ import * as os from "os";
 
 const pkg = require(path.join(__dirname, "..", "..", "package.json"));
 
+// fs.existsSync(dir + "/SomeName") matches an on-disk entry of ANY case on a
+// case-insensitive filesystem (default on Windows and macOS) — so checking for the old
+// mixed-case "Claude-Code-Harness-MCP" this way always matches the current lowercase
+// "claude-code-harness-mcp" folder too, since they're the same path there. That made
+// "stale pre-rename skill" drift fire forever, on every run, even right after a clean
+// install. Comparing against the real directory listing (case-sensitive string
+// equality) is the only way to tell whether a genuinely different-cased entry exists.
+function hasExactDirEntry(dir: string, name: string): boolean {
+  if (!fs.existsSync(dir)) return false;
+  return fs.readdirSync(dir).includes(name);
+}
+
 // Every host agent this harness routes FROM. Claude Code itself is deliberately absent —
 // it's the backend the harness calls, not a host that would route work to it. Aider is
 // absent too (no MCP support at all), and the generic cross-framework "agents" skills
@@ -133,25 +145,43 @@ function writeCodexMcpConfig(configPath: string): void {
 
 // Used by `doctor` to skip agents that were never set up in this project — without
 // this, doctor would try to configure every one of the ~19 supported agents on every
-// run, regardless of whether the project actually uses them. Deliberately checks ONLY
-// the MCP config entry, never the skills directory: several agents (vscode, cursor,
-// amp) share the generic ".agents/skills/" fallback with antigravity when they have no
-// verified dedicated skills path, so a skill folder found there doesn't tell you which
-// agent actually created it. Each agent's MCP config path is always agent-specific
-// (even the "best-effort" `.{slug}/mcp.json` ones), so it's the only unambiguous signal.
+// run, regardless of whether the project actually uses them. Primarily checks the MCP
+// config entry, since each agent's config path is agent-specific (even the "best-effort"
+// `.{slug}/mcp.json` ones) and unambiguous, unlike the skills directory (vscode, cursor,
+// amp all share the generic ".agents/skills/" fallback with antigravity).
+//
+// But antigravity/gemini/codex register their MCP entry at a HOME-level path
+// (~/.gemini/..., ~/.codex/config.toml) that has nothing to do with any one project —
+// once you've used one of them anywhere on this machine, that entry exists forever, in
+// every project. So for any MCP config path that resolves outside targetDir, the home
+// entry alone is not proof this specific project uses that agent; also require this
+// project's own skill directory to already exist (current or a stale pre-rename name).
+// Skip that project directory doesn't yet know this agent, and doctor should never be
+// the one to introduce it — only `setup <agent>` does that, deliberately.
 export function isAgentConfigured(agentId: AgentId, targetDir: string = process.cwd()): boolean {
   const mcpConfigPath = resolveMcpConfigPath(agentId, targetDir);
   if (!fs.existsSync(mcpConfigPath)) return false;
 
+  let mcpEntryPresent: boolean;
   if (agentId === "codex") {
-    return fs.readFileSync(mcpConfigPath, "utf-8").includes(`[mcp_servers.${MCP_SERVER_NAME}]`);
+    mcpEntryPresent = fs.readFileSync(mcpConfigPath, "utf-8").includes(`[mcp_servers.${MCP_SERVER_NAME}]`);
+  } else {
+    try {
+      const config = JSON.parse(fs.readFileSync(mcpConfigPath, "utf-8"));
+      mcpEntryPresent = Boolean(config?.mcpServers?.[MCP_SERVER_NAME]);
+    } catch {
+      mcpEntryPresent = false;
+    }
   }
-  try {
-    const config = JSON.parse(fs.readFileSync(mcpConfigPath, "utf-8"));
-    return Boolean(config?.mcpServers?.[MCP_SERVER_NAME]);
-  } catch {
-    return false;
-  }
+  if (!mcpEntryPresent) return false;
+
+  const resolvedTargetDir = path.resolve(targetDir);
+  const isHomeLevelConfig = !path.resolve(mcpConfigPath).startsWith(resolvedTargetDir + path.sep);
+  if (!isHomeLevelConfig) return true;
+
+  const skillsDir = resolveSkillsDir(agentId, targetDir);
+  if (hasExactDirEntry(skillsDir, SKILL_NAME)) return true;
+  return STALE_SKILL_NAMES.some((staleName) => hasExactDirEntry(skillsDir, staleName));
 }
 
 // A single skill, deployed under the exact same name/slash-command on every agent —
@@ -255,8 +285,8 @@ export function installHarness(agentId: AgentId, targetDir: string = process.cwd
   // settling on the current lowercase kebab-case name. Remove both old directories
   // so agents don't show stale duplicate skill/slash-command entries.
   for (const staleName of STALE_SKILL_NAMES) {
-    const staleDir = path.join(skillsDir, staleName);
-    if (fs.existsSync(staleDir)) {
+    if (hasExactDirEntry(skillsDir, staleName)) {
+      const staleDir = path.join(skillsDir, staleName);
       fs.rmSync(staleDir, { recursive: true, force: true });
       console.log(`✓ Removed stale skill: ${staleDir}`);
     }
@@ -293,7 +323,7 @@ export function getSkillDrift(agentId: AgentId, targetDir: string): SkillDrift {
   const versionStamp = path.join(skillsDir, ".claude-harness-mcp-version");
 
   for (const staleName of STALE_SKILL_NAMES) {
-    if (fs.existsSync(path.join(skillsDir, staleName))) {
+    if (hasExactDirEntry(skillsDir, staleName)) {
       return { agentId, isStale: true, reason: `stale pre-rename skill (${staleName}) still present` };
     }
   }
