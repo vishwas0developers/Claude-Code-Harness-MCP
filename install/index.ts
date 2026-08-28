@@ -33,8 +33,7 @@ export const PLATFORMS: { slug: string; label: string }[] = [
 export const SUPPORTED_AGENTS = PLATFORMS.map((p) => p.slug);
 export type AgentId = (typeof SUPPORTED_AGENTS)[number];
 
-// Verified/documented MCP config paths, reused from the same per-agent conventions
-// WorkspaceSync already confirmed. Everything else falls back to `.{slug}/mcp.json`.
+// Verified/documented MCP config paths per agent. Everything else falls back to `.{slug}/mcp.json`.
 const VERIFIED_MCP_TARGETS: Partial<Record<AgentId, (targetDir: string) => string>> = {
   vscode: (targetDir) => path.join(targetDir, ".vscode", "mcp.json"),
   cursor: (targetDir) => path.join(targetDir, ".cursor", "mcp.json"),

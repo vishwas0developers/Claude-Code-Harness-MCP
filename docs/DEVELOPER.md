@@ -34,9 +34,8 @@ with a different argument to start the long-running stdio MCP server — there i
 runtime auto-detection, the calling agent's own config is what always passes `["mcp"]`.
 
 `install/index.ts` owns the per-agent MCP config paths/formats and the single
-`Claude-Harness-MCP` skill definition, mirroring the same verified-path/skills-directory
-methodology used by [WorkspaceSync](https://github.com/vishwas0developers/workspace-sync),
-narrowed to one skill and one MCP server instead of many.
+`Claude-Harness-MCP` skill definition, using verified config paths and
+skills-directory conventions for one skill and one MCP server.
 
 ## Configuration Reference
 

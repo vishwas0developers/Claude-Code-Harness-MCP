@@ -68,7 +68,7 @@ claude-code-harness-mcp doctor
 
 ## 🔌 Agent Configuration
 
-`setup` targets every agent below in a single pass — the same agent set and the same verified MCP config/skills-directory conventions used by [WorkspaceSync](https://github.com/vishwas0developers/workspace-sync), applied here to one MCP server and one skill instead of many. Claude Code itself is intentionally not in this list — it's the backend the harness calls, not a host that would route work to it.
+`setup` targets every agent below in a single pass, using verified MCP config/skills-directory conventions for each. Claude Code itself is intentionally not in this list — it's the backend the harness calls, not a host that would route work to it.
 
 | Platform | MCP Config Location | Format | Skills Directory |
 | :--- | :--- | :--- | :--- |
@@ -93,7 +93,7 @@ claude-code-harness-mcp doctor
 | Devin CLI | `.devin/mcp.json` *(best-effort)* | JSON | `.devin/skills/` |
 
 > [!NOTE]
-> **Aider** is excluded — it has no MCP support at all, so there's nothing for `setup` to configure there. The generic **Agent Skills (cross-framework)** fallback identifier from WorkspaceSync is also excluded — it's a skills-only convention name, not a runtime agent that could call an MCP tool.
+> **Aider** is excluded — it has no MCP support at all, so there's nothing for `setup` to configure there. The generic **Agent Skills (cross-framework)** fallback identifier is also excluded — it's a skills-only convention name, not a runtime agent that could call an MCP tool.
 >
 > "Best-effort" MCP paths follow the `.{platform}/mcp.json` shape most MCP-supporting editor forks use, and skills directories marked "generic" fall back to the cross-framework `.agents/skills/` convention. If one doesn't take effect for your version of that agent, please open an issue with the correct location.
 
