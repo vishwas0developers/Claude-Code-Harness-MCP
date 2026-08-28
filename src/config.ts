@@ -1,11 +1,14 @@
 import * as fs from "fs";
 import * as path from "path";
 
+export type ThinkingMode = "low" | "medium" | "high";
+
 export interface HarnessConfig {
   model: "sonnet" | "opus";
+  thinkingMode: ThinkingMode;
 }
 
-const DEFAULT_CONFIG: HarnessConfig = { model: "sonnet" };
+const DEFAULT_CONFIG: HarnessConfig = { model: "sonnet", thinkingMode: "medium" };
 
 export function getConfigDir(targetDir: string = process.cwd()): string {
   return path.join(targetDir, ".claude-harness-mcp");
@@ -37,6 +40,14 @@ export function loadConfig(targetDir: string = process.cwd()): HarnessConfig {
   } catch {
     return { ...DEFAULT_CONFIG };
   }
+}
+
+// Merges partial updates into the on-disk config, creating it with defaults first if absent.
+export function updateConfig(updates: Partial<HarnessConfig>, targetDir: string = process.cwd()): HarnessConfig {
+  const current = ensureConfig(targetDir);
+  const next = { ...current, ...updates };
+  fs.writeFileSync(getConfigPath(targetDir), JSON.stringify(next, null, 2), "utf-8");
+  return next;
 }
 
 export function getLogPath(targetDir: string = process.cwd()): string {

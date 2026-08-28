@@ -8,42 +8,29 @@ const pkg = require("../../package.json");
 const program = new Command();
 program.name("claude-code-harness-mcp").description(pkg.description).version(pkg.version);
 
-function parseOnly(only?: string): AgentId[] {
-  if (!only) return SUPPORTED_AGENTS as AgentId[];
-  const requested = only.split(",").map((s) => s.trim());
-  const invalid = requested.filter((r) => !SUPPORTED_AGENTS.includes(r as AgentId));
-  if (invalid.length > 0) {
-    throw new Error(`Unknown agent(s): ${invalid.join(", ")}. Supported: ${SUPPORTED_AGENTS.join(", ")}.`);
-  }
-  return requested as AgentId[];
-}
-
 program
-  .command("setup")
-  .description("One-command setup: configures the MCP server + Claude-Harness-MCP skill for every supported agent, and initializes local config.")
-  .option("--only <agents>", "Comma-separated list of agent slugs to configure (default: all supported agents)")
-  .action((opts) => {
-    // ponytail: no presence-detection — every write here is an additive merge (existing
-    // MCP entries and skill files for other tools are never touched), so configuring an
-    // agent that isn't actually installed on this machine is harmless. Add detection only
-    // if the unconditional writes turn out to create noticeable directory clutter.
-    const agents = parseOnly(opts.only);
-
-    console.log(`Configuring ${agents.length} agent(s)...\n`);
-    for (const agentId of agents) {
-      const platform = PLATFORMS.find((p) => p.slug === agentId);
-      console.log(`— ${platform ? platform.label : agentId} —`);
-      try {
-        installHarness(agentId);
-      } catch (err: any) {
-        console.error(`  ✗ Failed to configure ${agentId}: ${err.message}`);
-      }
-      console.log("");
+  .command("setup <agent>")
+  .description(`Configures the MCP server + Claude-Code-Harness-MCP skill for one specific agent. Supported: ${SUPPORTED_AGENTS.join(", ")}.`)
+  .action((agent: string) => {
+    if (!SUPPORTED_AGENTS.includes(agent as AgentId)) {
+      console.error(`✗ Unknown agent "${agent}". Supported: ${SUPPORTED_AGENTS.join(", ")}.`);
+      process.exitCode = 1;
+      return;
+    }
+    const agentId = agent as AgentId;
+    const platform = PLATFORMS.find((p) => p.slug === agentId);
+    console.log(`— ${platform ? platform.label : agentId} —`);
+    try {
+      installHarness(agentId);
+    } catch (err: any) {
+      console.error(`  ✗ Failed to configure ${agentId}: ${err.message}`);
+      process.exitCode = 1;
+      return;
     }
 
     const config = ensureConfig();
-    console.log(`✓ Local config ready at ${getConfigPath()} (model: ${config.model})`);
-    console.log("\nSetup complete. No further manual steps are required.");
+    console.log(`\n✓ Local config ready at ${getConfigPath()} (model: ${config.model})`);
+    console.log("Setup complete. No further manual steps are required.");
   });
 
 program

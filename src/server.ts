@@ -2,7 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import * as path from "path";
-import { loadConfig } from "./config";
+import { loadConfig, updateConfig, ThinkingMode } from "./config";
 import { classifyTask, scoreDifficulty } from "./classifier";
 import { runClaudeCode, checkSessionStatus } from "./claude-adapter";
 import { appendTaskLog, readTaskLog } from "./log";
@@ -52,7 +52,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "reauthenticate",
-        description: "Get instructions to re-authenticate the local Claude Code CLI session after it has expired.",
+        description: "Get instructions to re-authenticate the local Claude Code CLI session after it has expired. Also backs the /Claude-Code-Harness-MCP login skill flow.",
+        inputSchema: { type: "object", properties: {} },
+      },
+      {
+        name: "logout",
+        description: "Get instructions to sign out the local Claude Code CLI session. Backs the /Claude-Code-Harness-MCP logout skill flow.",
         inputSchema: { type: "object", properties: {} },
       },
       {
@@ -63,6 +68,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: { limit: { type: "number", description: "Max entries to return (default 20)" } },
         },
       },
+      {
+        name: "configure_harness",
+        description:
+          "Read or update harness configuration (default model, thinking mode). Called by the /Claude-Code-Harness-MCP manage model|thinking flow. Call with no arguments to just read the current config.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            model: { type: "string", enum: ["sonnet", "opus"], description: "Default model used by route_task" },
+            thinking_mode: { type: "string", enum: ["low", "medium", "high"], description: "Extended-thinking level applied to every Claude Code call" },
+            project_path: { type: "string", description: "Absolute path to the project directory (default: current directory)" },
+          },
+        },
+      },
     ],
   };
 });
@@ -71,12 +89,13 @@ async function executeOnClaude(
   taskDescription: string,
   fileContext: string | undefined,
   projectPath: string,
-  model: "sonnet" | "opus"
+  model: "sonnet" | "opus",
+  thinkingMode: ThinkingMode
 ) {
   const prompt = fileContext
     ? `${taskDescription}\n\nRelevant context:\n${fileContext}`
     : taskDescription;
-  return runClaudeCode(prompt, { model, cwd: projectPath });
+  return runClaudeCode(prompt, { model, thinkingMode, cwd: projectPath });
 }
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -107,7 +126,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const config = loadConfig(projectPath);
         const model = scoreDifficulty(taskDescription) === "opus" ? "opus" : config.model;
-        const runResult = await executeOnClaude(taskDescription, fileContext, projectPath, model);
+        const runResult = await executeOnClaude(taskDescription, fileContext, projectPath, model, config.thinkingMode);
 
         appendTaskLog(
           {
@@ -151,7 +170,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const config = loadConfig(projectPath);
         const model = (args?.model_hint as "sonnet" | "opus") || config.model;
 
-        const runResult = await executeOnClaude(taskDescription, fileContext, projectPath, model);
+        const runResult = await executeOnClaude(taskDescription, fileContext, projectPath, model, config.thinkingMode);
 
         appendTaskLog(
           {
@@ -185,10 +204,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
 
+      case "logout": {
+        const result = {
+          instructions: "Run `claude /logout` in a terminal to sign out the local Claude Code CLI session. Run `/Claude-Code-Harness-MCP login` (or `claude /login`) again before the next route_task/force_claude_task call.",
+        };
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+
       case "get_task_log": {
         const limit = args?.limit !== undefined ? Number(args.limit) : 20;
         const entries = readTaskLog(limit);
         return { content: [{ type: "text", text: JSON.stringify({ entries }, null, 2) }] };
+      }
+
+      case "configure_harness": {
+        const projectPath = args?.project_path ? String(args.project_path) : process.cwd();
+        const updates: { model?: "sonnet" | "opus"; thinkingMode?: ThinkingMode } = {};
+        if (args?.model) updates.model = args.model as "sonnet" | "opus";
+        if (args?.thinking_mode) updates.thinkingMode = args.thinking_mode as ThinkingMode;
+
+        const config = Object.keys(updates).length > 0 ? updateConfig(updates, projectPath) : loadConfig(projectPath);
+        return { content: [{ type: "text", text: JSON.stringify({ config }, null, 2) }] };
       }
 
       default:

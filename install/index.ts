@@ -132,43 +132,72 @@ function writeCodexMcpConfig(configPath: string): void {
 }
 
 // A single skill, deployed under the exact same name/slash-command on every agent —
-// see README.md "The Claude-Harness-MCP Skill". ponytail: one shared skill file instead
+// see README.md "The Claude-Code-Harness-MCP Skill". ponytail: one shared skill file instead
 // of workspace-sync's six, because this harness only has one workflow to teach.
-export const SKILL_NAME = "Claude-Harness-MCP";
+export const SKILL_NAME = "Claude-Code-Harness-MCP";
 
 export const SKILL_CONTENT = `---
-name: Claude-Harness-MCP
-description: "Split the current implementation plan into design/UI work and functionality/backend/logic work; do design yourself, route functionality to the Claude Code harness."
+name: Claude-Code-Harness-MCP
+description: "Verify the current implementation plan, split it into design/UI work and functionality/backend/logic work, do design yourself and route functionality to the Claude Code harness. Also handles /Claude-Code-Harness-MCP manage model|thinking, login, and logout."
 ---
 
 # Claude Code Harness
 
-Invoke this skill (\`/Claude-Harness-MCP\`) whenever you are about to implement a plan —
-a feature, a bug fix, or any multi-step build.
+This skill has four invocation forms:
 
-## What to do
+- \`/Claude-Code-Harness-MCP\` — run the harness workflow against your current implementation plan.
+- \`/Claude-Code-Harness-MCP manage model <sonnet|opus>\` or \`/Claude-Code-Harness-MCP manage thinking <low|medium|high>\` — reconfigure the harness. See "Management mode" below.
+- \`/Claude-Code-Harness-MCP login\` — re-authenticate the local Claude Code CLI session.
+- \`/Claude-Code-Harness-MCP logout\` — sign out the local Claude Code CLI session.
 
-1. Break the plan into individual tasks.
-2. For each task, decide: is this UI/design/visual work, or functionality/backend/logic work?
+## Harness workflow (default invocation)
+
+1. **Verify there is an implementation plan.** If you (the host model) have not yet produced
+   one for the current request, produce it first — do not proceed on a vague or missing plan.
+2. Break the verified plan into individual tasks.
+3. For each task, decide: is this UI/design/visual work, or functionality/backend/logic work?
    - UI/design signals: layout, CSS/styling, color, animation, responsive behavior, typography,
      component visual structure, design tokens.
    - Functionality signals: algorithms, APIs, databases, auth logic, state management,
      business logic, data processing, bug fixes in logic, performance, tests.
-3. Implement every design/UI task yourself, using your own model.
-4. For every functionality task, call the \`route_task\` MCP tool from the
+4. Implement every design/UI task yourself, using your own model.
+5. For every functionality task, call the \`route_task\` MCP tool from the
    \`claude-code-harness\` server with the task description and relevant file/project context.
    It runs the task through a local Claude Code session and returns the result — apply
    the returned diff/output as you would your own.
-5. If a single task mixes both (e.g. "a form with validation"), split it: implement the
+6. If a single task mixes both (e.g. "a form with validation"), split it: implement the
    UI shell yourself, send only the validation/logic function to \`route_task\`.
 
-## Notes
+### Notes
 
 - \`route_task\` will itself refuse (\`handled: false\`) anything that reads as design work —
   treat that as confirmation to implement it yourself, not an error.
 - Use \`force_claude_task\` only to override classification deliberately.
 - If \`route_task\`/\`force_claude_task\` reports an expired Claude Code session, surface the
   \`reauthenticate\` instructions to the user rather than retrying silently.
+
+## Management mode (\`manage model\` / \`manage thinking\`)
+
+When invoked as \`manage model <value>\` or \`manage thinking <value>\`:
+
+1. Parse \`<value>\` from the invocation text.
+   - \`model\` accepts exactly: \`sonnet\`, \`opus\`.
+   - \`thinking\` accepts exactly: \`low\`, \`medium\`, \`high\`.
+2. Call the \`configure_harness\` MCP tool from the \`claude-code-harness\` server with
+   \`{ "model": "<value>" }\` or \`{ "thinking_mode": "<value>" }\` accordingly.
+3. Report back the tool's returned config as confirmation. Do not guess at a value the user
+   didn't provide — if \`<value>\` is missing or invalid, call \`configure_harness\` with no
+   arguments to show the current config instead of defaulting silently.
+
+## Login / logout
+
+- \`/Claude-Code-Harness-MCP login\`: call the \`reauthenticate\` MCP tool and relay its
+  returned instructions to the user verbatim.
+- \`/Claude-Code-Harness-MCP logout\`: call the \`logout\` MCP tool and relay its returned
+  instructions to the user verbatim.
+
+Both are instructional, not automatic — the actual browser-based OAuth flow runs in a
+terminal the user controls, not inside this MCP session.
 `;
 
 export function installHarness(agentId: AgentId, targetDir: string = process.cwd()): void {

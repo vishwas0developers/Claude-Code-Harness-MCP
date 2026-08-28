@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import { ThinkingMode } from "./config";
 
 export interface ClaudeRunResult {
   success: boolean;
@@ -7,6 +8,14 @@ export interface ClaudeRunResult {
   exitCode: number | null;
 }
 
+// Claude Code CLI has no --thinking flag; extended thinking is triggered by these
+// keywords appearing in the prompt text itself. "low" sends no keyword at all.
+const THINKING_KEYWORDS: Record<ThinkingMode, string | null> = {
+  low: null,
+  medium: "think hard",
+  high: "ultrathink",
+};
+
 // Shells out to the local Claude Code CLI in headless/print mode, scoped to
 // `cwd`, reusing whatever session `claude /login` already established (no API
 // key is ever passed here). ponytail: a single spawned `claude -p` call is the
@@ -14,12 +23,14 @@ export interface ClaudeRunResult {
 // parallel route_task calls actually happen.
 export function runClaudeCode(
   prompt: string,
-  options: { model: "sonnet" | "opus"; cwd: string; timeoutMs?: number }
+  options: { model: "sonnet" | "opus"; thinkingMode?: ThinkingMode; cwd: string; timeoutMs?: number }
 ): Promise<ClaudeRunResult> {
-  const { model, cwd, timeoutMs = 10 * 60 * 1000 } = options;
+  const { model, thinkingMode = "medium", cwd, timeoutMs = 10 * 60 * 1000 } = options;
+  const keyword = THINKING_KEYWORDS[thinkingMode];
+  const finalPrompt = keyword ? `${keyword}. ${prompt}` : prompt;
 
   return new Promise((resolve) => {
-    const child = spawn("claude", ["-p", prompt, "--model", model], {
+    const child = spawn("claude", ["-p", finalPrompt, "--model", model], {
       cwd,
       shell: process.platform === "win32",
     });
@@ -59,6 +70,7 @@ export function runClaudeCode(
 export async function checkSessionStatus(): Promise<{ authenticated: boolean; detail: string }> {
   const result = await runClaudeCode("Respond with the single word: ok", {
     model: "sonnet",
+    thinkingMode: "low",
     cwd: process.cwd(),
     timeoutMs: 30_000,
   });

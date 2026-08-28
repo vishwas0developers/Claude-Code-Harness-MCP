@@ -5,30 +5,28 @@ All commands run as `claude-code-harness-mcp <command>` (after a global install)
 
 ---
 
-> ### `setup`
+> ### `setup <agent>`
 >
-> 📌 **Purpose:** One-command setup. Configures the MCP server entry and deploys the
-> `Claude-Harness-MCP` skill for every supported agent (see the agent table in
+> 📌 **Purpose:** Configures the MCP server entry and deploys the `Claude-Code-Harness-MCP`
+> skill for one specific agent (see the agent table in
 > [README.md](../README.md#-agent-configuration)), and initializes
-> `.claude-harness-mcp/config.json` if it doesn't already exist.
+> `.claude-harness-mcp/config.json` if it doesn't already exist. `<agent>` is required —
+> there is no bare `setup` with no argument.
 >
 > 💻 **Syntax:**
 > ```bash
-> npx claude-code-harness-mcp setup [--only <agents>]
+> npx claude-code-harness-mcp setup <agent>
+> # e.g. npx claude-code-harness-mcp setup antigravity
 > ```
 >
-> ⚙️ **Options:**
-> - `--only <agents>`: Comma-separated agent slugs (e.g. `antigravity,cursor`) to configure
->   instead of every supported agent.
->
 > 💡 **Note:** Safe to re-run any time — merges into existing MCP config, never overwrites
-> your `model` choice.
+> your `model` choice. Run it once per agent you use.
 
 ---
 
 > ### `doctor`
 >
-> 📌 **Purpose:** Report and repair drift — a missing or stale `Claude-Harness-MCP` skill
+> 📌 **Purpose:** Report and repair drift — a missing or stale `Claude-Code-Harness-MCP` skill
 > file, or a version mismatch — against the currently installed package version.
 >
 > 💻 **Syntax:**
