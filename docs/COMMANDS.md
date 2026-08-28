@@ -6,7 +6,7 @@ or inside your **AI agent's chat** as a skill invocation.
 | Command | Terminal | Agent | Description |
 | :--- | :---: | :---: | :--- |
 | `setup <agent>` | ✅ | ❌ | Configure the MCP server + skill for one specific agent. |
-| `doctor` | ✅ | ❌ | Report and repair skill/MCP-entry drift, including removing stale pre-rename skill files. |
+| `doctor` | ✅ | ❌ | Runs with no arguments. Reports and repairs skill/MCP-entry drift, including removing stale pre-rename skill files. |
 | `mcp` | ✅ | ❌ | Start the stdio MCP server (invoked automatically by your agent's MCP config, not run by hand). |
 | `list-agents` | ✅ | ❌ | Print every supported agent's MCP config path / skill directory, without writing anything. |
 | `/claude-code-harness-mcp start` | ❌ | ✅ | Verify the current plan, split it into design vs. logic tasks, route logic tasks to Claude Code, and verify each routed task. |
