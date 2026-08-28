@@ -132,29 +132,34 @@ function writeCodexMcpConfig(configPath: string): void {
 }
 
 // A single skill, deployed under the exact same name/slash-command on every agent —
-// see README.md "The Claude-Code-Harness-MCP Skill". ponytail: one shared skill file instead
+// see README.md "The claude-code-harness-mcp Skill". ponytail: one shared skill file instead
 // of workspace-sync's six, because this harness only has one workflow to teach.
-export const SKILL_NAME = "Claude-Code-Harness-MCP";
+// Lowercase kebab-case name (not "Claude-Code-Harness-MCP"): several host agents'
+// skill loaders validate/normalize names to ^[a-z0-9-]+$ and silently fail to
+// register a skill whose name doesn't match, which was masking the harness entirely
+// on some agents.
+export const SKILL_NAME = "claude-code-harness-mcp";
+const STALE_SKILL_NAMES = ["Claude-Harness-MCP", "Claude-Code-Harness-MCP"];
 
 export const SKILL_CONTENT = `---
-name: Claude-Code-Harness-MCP
-description: "Verify the current implementation plan, split it into design/UI work and functionality/backend/logic work, do design yourself and route functionality to the Claude Code harness. Also handles /Claude-Code-Harness-MCP manage model|thinking, login, and logout."
+name: claude-code-harness-mcp
+description: "Verify the current implementation plan, split it into design/UI work and functionality/backend/logic work, do design yourself and route functionality to the Claude Code harness, then verify each routed task actually succeeded. Also handles /claude-code-harness-mcp manage model|thinking, login, and logout."
 ---
 
 # Claude Code Harness
 
-This skill has four invocation forms:
+This skill has five invocation forms:
 
-- \`/Claude-Code-Harness-MCP\` — run the harness workflow against your current implementation plan.
-- \`/Claude-Code-Harness-MCP manage model <sonnet|opus>\` or \`/Claude-Code-Harness-MCP manage thinking <low|medium|high>\` — reconfigure the harness. See "Management mode" below.
-- \`/Claude-Code-Harness-MCP login\` — re-authenticate the local Claude Code CLI session.
-- \`/Claude-Code-Harness-MCP logout\` — sign out the local Claude Code CLI session.
+- \`/claude-code-harness-mcp start\` — run the harness workflow against your current implementation plan.
+- \`/claude-code-harness-mcp manage model <sonnet|opus>\` or \`/claude-code-harness-mcp manage thinking <low|medium|high>\` — reconfigure the harness. See "Management mode" below.
+- \`/claude-code-harness-mcp login\` — re-authenticate the local Claude Code CLI session.
+- \`/claude-code-harness-mcp logout\` — sign out the local Claude Code CLI session.
 
-## Harness workflow (default invocation)
+## Harness workflow (\`start\`)
 
 1. **Verify there is an implementation plan.** If you (the host model) have not yet produced
    one for the current request, produce it first — do not proceed on a vague or missing plan.
-2. Break the verified plan into individual tasks.
+2. Break the verified plan into small, individually-checkable tasks.
 3. For each task, decide: is this UI/design/visual work, or functionality/backend/logic work?
    - UI/design signals: layout, CSS/styling, color, animation, responsive behavior, typography,
      component visual structure, design tokens.
@@ -163,10 +168,19 @@ This skill has four invocation forms:
 4. Implement every design/UI task yourself, using your own model.
 5. For every functionality task, call the \`route_task\` MCP tool from the
    \`claude-code-harness\` server with the task description and relevant file/project context.
-   It runs the task through a local Claude Code session and returns the result — apply
-   the returned diff/output as you would your own.
-6. If a single task mixes both (e.g. "a form with validation"), split it: implement the
+   Do not implement functionality tasks yourself — delegate them and wait for the result.
+6. **Verify each routed task before moving on.** Read the tool's response:
+   - \`success: false\` or \`handled: false\`: do not treat the task as done. If \`handled: false\`,
+     it was classified as design work — implement it yourself instead. If \`success: false\`,
+     inspect the returned error; retry once with more file/context, or call \`force_claude_task\`
+     if the classification itself was wrong. Surface a genuinely stuck task to the user rather
+     than silently marking it complete.
+   - \`success: true\`: check the returned \`result\` actually addresses the task (e.g. the file/
+     function described was really added) before considering that task finished.
+7. If a single task mixes both (e.g. "a form with validation"), split it: implement the
    UI shell yourself, send only the validation/logic function to \`route_task\`.
+8. Once every task has been implemented or routed-and-verified, summarize what was done
+   yourself vs. what Claude Code implemented.
 
 ### Notes
 
@@ -191,9 +205,9 @@ When invoked as \`manage model <value>\` or \`manage thinking <value>\`:
 
 ## Login / logout
 
-- \`/Claude-Code-Harness-MCP login\`: call the \`reauthenticate\` MCP tool and relay its
+- \`/claude-code-harness-mcp login\`: call the \`reauthenticate\` MCP tool and relay its
   returned instructions to the user verbatim.
-- \`/Claude-Code-Harness-MCP logout\`: call the \`logout\` MCP tool and relay its returned
+- \`/claude-code-harness-mcp logout\`: call the \`logout\` MCP tool and relay its returned
   instructions to the user verbatim.
 
 Both are instructional, not automatic — the actual browser-based OAuth flow runs in a
@@ -214,12 +228,15 @@ export function installHarness(agentId: AgentId, targetDir: string = process.cwd
 
   const skillsDir = resolveSkillsDir(agentId, targetDir);
 
-  // Renamed from "Claude-Harness-MCP" — remove the old directory so agents don't
-  // show both as separate skill/slash-command entries side by side.
-  const staleDir = path.join(skillsDir, "Claude-Harness-MCP");
-  if (fs.existsSync(staleDir)) {
-    fs.rmSync(staleDir, { recursive: true, force: true });
-    console.log(`✓ Removed stale skill: ${staleDir}`);
+  // Renamed twice — "Claude-Harness-MCP" then "Claude-Code-Harness-MCP" — before
+  // settling on the current lowercase kebab-case name. Remove both old directories
+  // so agents don't show stale duplicate skill/slash-command entries.
+  for (const staleName of STALE_SKILL_NAMES) {
+    const staleDir = path.join(skillsDir, staleName);
+    if (fs.existsSync(staleDir)) {
+      fs.rmSync(staleDir, { recursive: true, force: true });
+      console.log(`✓ Removed stale skill: ${staleDir}`);
+    }
   }
 
   const skillDir = path.join(skillsDir, SKILL_NAME);
@@ -252,8 +269,10 @@ export function getSkillDrift(agentId: AgentId, targetDir: string): SkillDrift {
   const skillFile = path.join(skillsDir, SKILL_NAME, "SKILL.md");
   const versionStamp = path.join(skillsDir, ".claude-harness-mcp-version");
 
-  if (fs.existsSync(path.join(skillsDir, "Claude-Harness-MCP"))) {
-    return { agentId, isStale: true, reason: "stale pre-rename skill (Claude-Harness-MCP) still present" };
+  for (const staleName of STALE_SKILL_NAMES) {
+    if (fs.existsSync(path.join(skillsDir, staleName))) {
+      return { agentId, isStale: true, reason: `stale pre-rename skill (${staleName}) still present` };
+    }
   }
   if (!fs.existsSync(skillFile)) {
     return { agentId, isStale: true, reason: "skill not installed" };

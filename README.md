@@ -8,11 +8,11 @@ When an AI coding agent (Antigravity, Copilot, Cursor, Windsurf, and friends) pl
 
 Claude Code Harness MCP fixes that. It runs as a local MCP server that exposes Claude Code as a callable tool. Your host agent keeps planning and keeps doing all UI/design/visual work itself — for every functionality, backend, algorithmic, or data-handling task in its plan, it calls the harness instead of implementing it directly. The harness hands that task to a real headless Claude Code session (scoped to your project directory, authenticated against your Claude subscription) and returns the result — diffs, output, and status — back into the host agent's own workflow.
 
-**Claude Code is strictly a backend/logic sub-agent here.** The harness never receives UI, styling, layout, or visual-design work. Routing is carried two ways at once: the MCP tools' own descriptions (read automatically by every MCP-compatible host) and a single deployed skill invoked the same way everywhere — `/Claude-Code-Harness-MCP` — that tells the host model to split its plan into design vs. functionality before doing anything.
+**Claude Code is strictly a backend/logic sub-agent here.** The harness never receives UI, styling, layout, or visual-design work. Routing is carried two ways at once: the MCP tools' own descriptions (read automatically by every MCP-compatible host) and a single deployed skill invoked the same way everywhere — `/claude-code-harness-mcp start` — that tells the host model to split its plan into design vs. functionality before doing anything.
 
 If you find this project useful, consider giving it a ⭐ on GitHub!
 
-📖 **Looking for a specific command?** See the [Full Command Reference](docs/COMMANDS.md) for every terminal command and every `/Claude-Code-Harness-MCP` skill invocation in one place.
+📖 **Looking for a specific command?** See the [Full Command Reference](docs/COMMANDS.md) for every terminal command and every `/claude-code-harness-mcp` skill invocation in one place.
 
 ---
 
@@ -29,42 +29,30 @@ Before installing Claude Code Harness MCP, ensure your environment meets the fol
 > [!NOTE]
 > Claude Code Harness MCP shells out to your local Claude Code CLI session — it reuses your existing Pro/Max subscription login, it does **not** use a raw Anthropic API key. Run `claude /login` once before `setup` if you haven't already authenticated Claude Code on this machine.
 >
-> **Global install auto-installs the CLI too.** `npm install -g claude-code-harness-mcp` checks for `claude` on your PATH and, if it's missing, runs `npm install -g @anthropic-ai/claude-code` for you automatically. You still need to run `claude /login` yourself afterward — auto-install only gets the binary in place, it can't drive the browser-based OAuth flow. `npx claude-code-harness-mcp ...` (no global install) skips this — install the CLI yourself first if you're using the `npx` form.
+> **The global install auto-installs the CLI too.** `npm install -g claude-code-harness-mcp` checks for `claude` on your PATH and, if it's missing, runs `npm install -g @anthropic-ai/claude-code` for you automatically. You still need to run `claude /login` yourself afterward — auto-install only gets the binary in place, it can't drive the browser-based OAuth flow.
 
 ---
 
 ## ⚡ Quick Setup Guide
 
+Install the npm package globally — every step below depends on the `claude-code-harness-mcp` binary being on your PATH, so this is the only install path (no `npx`):
+
+```bash
+npm install -g claude-code-harness-mcp
+```
+
 `setup` always targets one specific agent — there is no bare `claude-code-harness-mcp setup` with no argument. Run the matching command below **inside the AI agent you use** — see the [🔌 Agent Configuration](#-agent-configuration) table for the full list:
 
 ```bash
-npx claude-code-harness-mcp setup antigravity
+claude-code-harness-mcp setup antigravity
 ```
 
 This one command:
 - Writes/merges the `claude-code-harness` MCP server entry into that agent's own MCP config file — using that agent's own config format (JSON merge for most, TOML text-merge for Codex) — without touching any other server already registered there.
-- Deploys **one skill**, `Claude-Code-Harness-MCP`, into that agent's own native skills directory. The skill's name and its slash command are the exact same string on every agent — `/Claude-Code-Harness-MCP` — even though the file path it lands at differs per agent (see the table below).
+- Deploys **one skill**, `claude-code-harness-mcp`, into that agent's own native skills directory. The skill's name is the exact same string on every agent — `claude-code-harness-mcp` — even though the file path it lands at differs per agent (see the table below).
 - Initializes `.claude-harness-mcp/config.json` with the default model (`sonnet`) — or preserves it if one already exists.
 
-`setup <agent>` is safe to re-run any time — it merges into existing MCP config rather than overwriting it, and re-deploys the skill to its current version without touching your `model` choice. Run it once per agent you use.
-
-### Install globally (optional)
-
-If you'd rather not prefix every command with `npx`:
-
-```bash
-npm install -g claude-code-harness-mcp
-claude-code-harness-mcp setup antigravity
-```
-
-### Keep it updated
-
-```bash
-npm update -g claude-code-harness-mcp
-claude-code-harness-mcp doctor
-```
-
-`doctor` repairs configuration drift (a stale MCP entry, a stale skill file, a missing config file) against whatever version is currently installed, the same way `setup` does on first run — it never touches your `model` choice or other settings you've changed.
+`setup <agent>` is safe to re-run any time — it merges into existing MCP config rather than overwriting it, and re-deploys the skill to its current version without touching your `model` choice. Run it once per agent you use. If a later version of the package changes the skill content, run `claude-code-harness-mcp doctor` to repair the drift.
 
 ---
 
@@ -101,30 +89,31 @@ Run the matching command below **inside the AI agent you use** to configure the 
 
 ---
 
-## 🧠 The `Claude-Code-Harness-MCP` Skill
+## 🧠 The `claude-code-harness-mcp` Skill
 
 Every configured agent gets the exact same skill, under the exact same name, invoked the exact same way, regardless of which agent you're in or where the skill file actually lives on disk. It has four invocation forms:
 
 ### Primary harness command
 
 ```
-/Claude-Code-Harness-MCP
+/claude-code-harness-mcp start
 ```
 
 Run this against your current implementation plan. The host model:
 
 1. **Verifies the plan** — producing one first if none exists yet for the current request.
-2. Splits the verified plan into design/UI tasks and functionality/backend/logic tasks.
+2. Splits the verified plan into small tasks: design/UI tasks and functionality/backend/logic tasks.
 3. Implements every design/UI task itself — those never go to the harness.
-4. Calls `route_task` (see below) for every functionality task, passing along the relevant file/plan context, and applies the returned result.
+4. Calls `route_task` (see below) for every functionality task, passing along the relevant file/plan context — delegating it rather than implementing it directly.
+5. **Verifies each routed task** by checking the tool's `success`/`handled` result and whether the returned output actually addresses the task, before considering it done.
 
 You don't have to type the slash command for routing to happen — the MCP tool descriptions below are read automatically by the host during normal planning. The skill exists so there's always an explicit, identically-named entry point across every agent when you want to trigger the split-and-route flow on demand.
 
 ### Management commands
 
 ```
-/Claude-Code-Harness-MCP manage model sonnet|opus
-/Claude-Code-Harness-MCP manage thinking low|medium|high
+/claude-code-harness-mcp manage model sonnet|opus
+/claude-code-harness-mcp manage thinking low|medium|high
 ```
 
 Reconfigures the harness by calling the `configure_harness` MCP tool — the same effect as hand-editing `.claude-harness-mcp/config.json`, but from inside your agent's chat, the same way you'd run `/model` in Claude Code itself. See [⚙️ Harness Configuration](#-harness-configuration) below for what each value does.
@@ -132,8 +121,8 @@ Reconfigures the harness by calling the `configure_harness` MCP tool — the sam
 ### Login / logout
 
 ```
-/Claude-Code-Harness-MCP login
-/Claude-Code-Harness-MCP logout
+/claude-code-harness-mcp login
+/claude-code-harness-mcp logout
 ```
 
 Calls the `reauthenticate` / `logout` MCP tool and surfaces its returned instructions. Both are informational — the actual `claude /login` / `claude /logout` browser-based flow runs in a terminal you control, not inside the MCP session itself.
@@ -147,10 +136,10 @@ Calls the `reauthenticate` / `logout` MCP tool and surfaces its returned instruc
 | `route_task` | **Main entry point.** Pass any implementation task from your plan. If it's a functionality/backend/logic task, it's executed by Claude Code and the result is returned. If it reads as UI/design/styling work, it's rejected (`handled: false`) so the host agent implements it itself. |
 | `force_claude_task` | Bypass classification — send a task straight to Claude Code regardless of how it reads. Manual override for edge cases. |
 | `check_session_status` | Reports whether the local Claude Code CLI session is authenticated, and when it expires. |
-| `reauthenticate` | Triggers the Claude Code CLI's browser login flow when a session has expired mid-task. Backs `/Claude-Code-Harness-MCP login`. |
-| `logout` | Returns instructions to sign out the local Claude Code CLI session. Backs `/Claude-Code-Harness-MCP logout`. |
+| `reauthenticate` | Triggers the Claude Code CLI's browser login flow when a session has expired mid-task. Backs `/claude-code-harness-mcp login`. |
+| `logout` | Returns instructions to sign out the local Claude Code CLI session. Backs `/claude-code-harness-mcp logout`. |
 | `get_task_log` | Returns recent routing decisions (task, classification, model used, outcome) for audit/debugging. |
-| `configure_harness` | Reads or updates the default `model`/`thinking_mode` in `.claude-harness-mcp/config.json`. Called by `/Claude-Code-Harness-MCP manage model\|thinking`. Called with no arguments, it just returns the current config. |
+| `configure_harness` | Reads or updates the default `model`/`thinking_mode` in `.claude-harness-mcp/config.json`. Called by `/claude-code-harness-mcp manage model|thinking`. Called with no arguments, it just returns the current config. |
 
 **Classification rule of thumb** (what decides `route_task`'s `handled` result): UI/layout/CSS/styling/animation/responsive/typography work stays with the host agent. Algorithms, APIs, databases, auth logic, state management, business logic, data processing, and bug fixes in logic go to Claude Code. A task that mixes both (e.g. "build a form with validation") is split — the harness only ever takes the logic half.
 
@@ -158,7 +147,7 @@ Calls the `reauthenticate` / `logout` MCP tool and surfaces its returned instruc
 
 ## ⚙️ Harness Configuration
 
-Claude Code Harness MCP defaults to **Sonnet** at **medium** thinking. Change either any time — via `/Claude-Code-Harness-MCP manage model|thinking` (see above) inside your agent, or by hand-editing `.claude-harness-mcp/config.json` in your project root:
+Claude Code Harness MCP defaults to **Sonnet** at **medium** thinking. Change either any time — via `/claude-code-harness-mcp manage model|thinking` (see above) inside your agent, or by hand-editing `.claude-harness-mcp/config.json` in your project root:
 
 ```json
 {

@@ -16,6 +16,17 @@ const THINKING_KEYWORDS: Record<ThinkingMode, string | null> = {
   high: "ultrathink",
 };
 
+// On Windows, `claude` resolves to a .cmd shim, which Node can only launch via
+// {shell: true} — and in that mode Node does NOT quote array args for you, it just
+// space-joins them. An unquoted multi-word prompt gets torn apart by cmd.exe's own
+// parser, so `claude` silently receives only the first word of the task description
+// (observed: the rest is dropped and it responds as if given no task at all). Quoting
+// each arg ourselves before handing shell:true a single command string fixes this.
+function quoteArgForWindowsShell(arg: string): string {
+  if (arg.length > 0 && !/[\s"]/.test(arg)) return arg;
+  return `"${arg.replace(/"/g, '\\"')}"`;
+}
+
 // Shells out to the local Claude Code CLI in headless/print mode, scoped to
 // `cwd`, reusing whatever session `claude /login` already established (no API
 // key is ever passed here). ponytail: a single spawned `claude -p` call is the
@@ -30,10 +41,19 @@ export function runClaudeCode(
   const finalPrompt = keyword ? `${keyword}. ${prompt}` : prompt;
 
   return new Promise((resolve) => {
-    const child = spawn("claude", ["-p", finalPrompt, "--model", model], {
-      cwd,
-      shell: process.platform === "win32",
-    });
+    // --permission-mode bypassPermissions is required: headless `-p` mode has no TTY to
+    // approve tool-use prompts (file writes, bash commands), so without it Claude Code
+    // silently stalls/no-ops on any task that needs to touch the filesystem — the task
+    // never actually runs. Safe here because every call is already scoped to `cwd`
+    // (the caller's project directory) under an authenticated user session, the same
+    // trust boundary a human running `claude` in that same directory would have.
+    const args = ["-p", finalPrompt, "--model", model, "--permission-mode", "bypassPermissions"];
+    // stdin is explicitly ignored: a one-shot `-p` call never needs it, and left as the
+    // default open pipe, Claude Code waits ~3s hoping for stdin data before proceeding.
+    const isWin = process.platform === "win32";
+    const child = isWin
+      ? spawn("claude " + args.map(quoteArgForWindowsShell).join(" "), { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"] })
+      : spawn("claude", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
 
     let output = "";
     let errorOutput = "";

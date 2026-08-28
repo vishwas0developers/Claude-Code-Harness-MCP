@@ -34,7 +34,7 @@ with a different argument to start the long-running stdio MCP server — there i
 runtime auto-detection, the calling agent's own config is what always passes `["mcp"]`.
 
 `install/index.ts` owns the per-agent MCP config paths/formats and the single
-`Claude-Code-Harness-MCP` skill definition, using verified config paths and
+`claude-code-harness-mcp` skill definition, using verified config paths and
 skills-directory conventions for one skill and one MCP server.
 
 ## Configuration Reference
@@ -46,7 +46,7 @@ skills-directory conventions for one skill and one MCP server.
 `thinkingMode` (`low`/`medium`/`high`) maps to the Claude Code CLI's extended-thinking
 keywords (`think hard` / `ultrathink`), prepended to the task prompt in `claude-adapter.ts` —
 `low` prepends nothing. Both fields are read/written by the `configure_harness` MCP tool,
-which backs the `/Claude-Code-Harness-MCP manage model|thinking` skill flow.
+which backs the `/claude-code-harness-mcp manage model|thinking` skill flow.
 
 `.claude-harness-mcp/task-log.jsonl` (project-local, one JSON object per line):
 ```json
